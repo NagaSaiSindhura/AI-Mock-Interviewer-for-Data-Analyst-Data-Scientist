@@ -1,3 +1,7 @@
+**AI-Mock-Interviewer-for-Data-Analyst-Data-Scientist**
+
+
+
 **Overview**
 
 InterviewPrep-AI is a web-based AI platform designed to simulate realistic mock interviews for aspiring Data Analysts, Data Scientists, and related roles. Unlike traditional mock interviews, which provide static questions and delayed feedback, InterviewPrep-AI uses large language models (LLMs), retrieval-augmented generation (RAG), NLP, and deep learning to generate job-specific questions, evaluate responses (text/audio/video), and provide instant, tailored feedback.
