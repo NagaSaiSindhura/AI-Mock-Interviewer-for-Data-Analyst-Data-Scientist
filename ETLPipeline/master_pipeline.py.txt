@@ -1,0 +1,195 @@
+# -*- coding: utf-8 -*-
+"""master_pipeline_dag.py
+
+Master DAG to orchestrate the StrataScratch data pipeline using TriggerDagRunOperator to chain DAGs.
+Includes validation and log monitoring.
+"""
+
+from datetime import datetime, timedelta
+from airflow import DAG
+from airflow.operators.python_operator import PythonOperator
+from airflow.operators.dummy_operator import DummyOperator
+from airflow.operators.dagrun_operator import TriggerDagRunOperator
+from google.cloud import logging
+from google.cloud import bigquery
+
+# Initialize Google Cloud Logging client for the master DAG
+logging_client = logging.Client()
+logger = logging_client.logger('strata_pipeline_master')
+
+default_args = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
+    'start_date': datetime(2025, 4, 9),
+}
+
+def log_pipeline_status(**context):
+    task_id = context['task'].task_id
+    status = context.get('dag_run').state if context.get('dag_run') else 'unknown'
+    logger.log_text(
+        f"Pipeline step {task_id} {status} at {datetime.now()}",
+        severity='INFO'
+    )
+
+def validate_pipeline_output():
+    logger.log_text("Starting pipeline output validation", severity='INFO')
+    
+    try:
+        bq_client = bigquery.Client()
+        table_id = "web-scraping-project-456218.interview_data.transformed_questions"
+
+        # Row count check
+        query = f"SELECT COUNT(*) as row_count FROM `{table_id}`"
+        row_count = next(bq_client.query(query).result()).row_count
+        if row_count == 0:
+            raise ValueError("No data found in the transformed_questions table")
+
+        # Column presence check
+        expected_columns = [
+            "sql_id", "question", "question_tables", "difficulty", "answer", "category",
+            "difficulty_group", "difficulty_encoded", "has_code_snippet",
+            "question_word_count", "answer_word_count", "company_count",
+            "question_keywords", "answer_keywords", "is_augmented"
+        ] + [f"company_{c}" for c in [
+            "activecampaign_amazon", "airbnb", "amadeus_expedia_airbnb", "amazon",
+            "amazon_doordash", "amazon_meta", "apple", "apple_amazon",
+            "apple_dell_microsoft", "apple_google", "apple_microsoft", "asana_twitter",
+            "city_los_angeles", "city_san_francisco", "deloitte_google", "doordash_lyft",
+            "dropbox_amazon", "ebay_amazon", "espn", "expedia_airbnb", "forbes",
+            "general_assembly_kaplan_google", "glassdoor_salesforce", "google",
+            "google_amazon", "google_netflix", "instacart_amazon", "linkedin",
+            "linkedin_dropbox", "lyft", "meta", "meta_asana", "meta_salesforce",
+            "microsoft", "microsoft_amazon", "netflix_google", "salesforce",
+            "shopify_amazon", "spotify", "tesla_google", "tesla_salesforce",
+            "walmart_amazon", "walmart_best_buy_dropbox", "wine_magazine", "yelp"
+        ]]
+        actual_columns = [f.name for f in bq_client.get_table(table_id).schema]
+        missing = [col for col in expected_columns if col not in actual_columns]
+        if missing:
+            raise ValueError(f"Missing columns: {missing}")
+
+        # NULL checks
+        critical = ["sql_id", "question", "answer"]
+        null_query = f"""
+        SELECT {', '.join([f"SUM(CASE WHEN {c} IS NULL THEN 1 ELSE 0 END) AS {c}_nulls" for c in critical])}
+        FROM `{table_id}`
+        """
+        result = next(bq_client.query(null_query).result())
+        for col in critical:
+            if getattr(result, f"{col}_nulls") > 0:
+                raise ValueError(f"Found NULLs in {col}")
+
+        # Difficulty check
+        diff_check = f"SELECT 1 FROM `{table_id}` WHERE difficulty NOT IN (1, 2, 3) LIMIT 1"
+        if next(bq_client.query(diff_check).result(), None):
+            raise ValueError("Invalid difficulty values found")
+
+        logger.log_text("All validation checks passed", severity='INFO')
+
+    except Exception as e:
+        logger.log_text(f"Validation error: {str(e)}", severity='ERROR')
+        raise
+
+def monitor_pipeline_logs():
+    logger.log_text("Monitoring logs from the last 24 hours", severity='INFO')
+    try:
+        end = datetime.utcnow()
+        start = end - timedelta(hours=24)
+        log_filter = (
+            'resource.type="global" '
+            'logName="projects/web-scraping-project-456218/logs/strata_pipeline_master" '
+            f'timestamp>="{start.isoformat()}Z" timestamp<="{end.isoformat()}Z"'
+        )
+        entries = logging_client.list_entries(
+            filter_=log_filter,
+            order_by=logging.DESCENDING,
+            page_size=1000
+        )
+        errors, warnings = 0, 0
+        for entry in entries:
+            if entry.severity == "ERROR":
+                errors += 1
+            elif entry.severity == "WARNING":
+                warnings += 1
+
+        logger.log_text(f"Log summary: {errors} errors, {warnings} warnings", severity='INFO')
+        if errors > 0:
+            raise ValueError("Errors found in logs")
+
+    except Exception as e:
+        logger.log_text(f"Log monitoring error: {str(e)}", severity='ERROR')
+        raise
+
+with DAG(
+    dag_id='master_pipeline_dag',
+    default_args=default_args,
+    description='Master DAG to orchestrate the StrataScratch data pipeline with validation and monitoring',
+    schedule_interval='0 0 1 * *',
+    catchup=False,
+) as dag:
+
+    start_pipeline = DummyOperator(task_id='start_pipeline')
+
+    trigger_web_scraping = TriggerDagRunOperator(
+        task_id='trigger_web_scraping',
+        trigger_dag_id='web_scraping_dag',
+        conf={"key": "value"},
+        reset_dag_run=True,
+        wait_for_completion=True,
+        on_success_callback=log_pipeline_status,
+        on_failure_callback=log_pipeline_status,
+    )
+
+    trigger_preprocessing = TriggerDagRunOperator(
+        task_id='trigger_preprocessing',
+        trigger_dag_id='preprocessing_dag',
+        conf={"key": "value"},
+        reset_dag_run=True,
+        wait_for_completion=True,
+        on_success_callback=log_pipeline_status,
+        on_failure_callback=log_pipeline_status,
+    )
+
+    trigger_transformation = TriggerDagRunOperator(
+        task_id='trigger_transformation',
+        trigger_dag_id='transformation_dag',
+        conf={"key": "value"},
+        reset_dag_run=True,
+        wait_for_completion=True,
+        on_success_callback=log_pipeline_status,
+        on_failure_callback=log_pipeline_status,
+    )
+
+    trigger_load_to_bigquery = TriggerDagRunOperator(
+        task_id='trigger_load_to_bigquery',
+        trigger_dag_id='strata_load_to_bigquery',
+        conf={"key": "value"},
+        reset_dag_run=True,
+        wait_for_completion=True,
+        on_success_callback=log_pipeline_status,
+        on_failure_callback=log_pipeline_status,
+    )
+
+    validate_output = PythonOperator(
+        task_id='validate_pipeline_output',
+        python_callable=validate_pipeline_output,
+        trigger_rule='all_success',
+        on_success_callback=log_pipeline_status,
+        on_failure_callback=log_pipeline_status,
+    )
+
+    monitor_logs = PythonOperator(
+        task_id='monitor_pipeline_logs',
+        python_callable=monitor_pipeline_logs,
+        trigger_rule='all_success',
+        on_success_callback=log_pipeline_status,
+        on_failure_callback=log_pipeline_status,
+    )
+
+    end_pipeline = DummyOperator(task_id='end_pipeline')
+
+    start_pipeline >> trigger_web_scraping >> trigger_preprocessing >> trigger_transformation >> trigger_load_to_bigquery >> validate_output >> monitor_logs >> end_pipeline

@@ -1,0 +1,196 @@
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from datetime import datetime, timedelta
+import pandas as pd
+from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import MultiLabelBinarizer
+import re
+import nltk
+from nltk.corpus import wordnet
+from rake_nltk import Rake
+from google.cloud import storage
+
+def get_synonym(word):
+    """Get a synonym for the given word using WordNet."""
+    synonyms = []
+    for syn in wordnet.synsets(word):
+        for lemma in syn.lemmas():
+            synonyms.append(lemma.name())
+    synonyms = list(set(synonyms) - {word})
+    return synonyms[0] if synonyms else word
+
+def synonym_replacement(text):
+    """Replace words in the text with synonyms (50% chance per word)."""
+    if not isinstance(text, str) or not text:
+        return text
+    tokens = text.split()
+    new_tokens = []
+    for token in tokens:
+        if pd.Series([0, 1]).sample(1, random_state=42).iloc[0]:
+            synonym = get_synonym(token)
+            new_tokens.append(synonym)
+        else:
+            new_tokens.append(token)
+    return " ".join(new_tokens)
+
+def extract_keywords(text):
+    """Extract keywords from the text using RAKE."""
+    if not isinstance(text, str) or not text:
+        return ""
+    rake = Rake()
+    rake.extract_keywords_from_text(text)
+    keywords = rake.get_ranked_phrases()[:3]
+    return "; ".join(keywords) if keywords else ""
+
+def get_latest_csv_file(bucket_name, prefix):
+    """Get the most recent CSV file from the GCS bucket."""
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+    blobs = list(bucket.list_blobs(prefix=prefix))
+    
+    if not blobs:
+        raise FileNotFoundError(f"No files found in gs://{bucket_name}/{prefix}")
+    
+    latest_blob = max(blobs, key=lambda blob: blob.time_created)
+    return f"gs://{bucket_name}/{latest_blob.name}"
+
+def transform_data():
+    try:
+        # Download NLTK data at runtime with error handling
+        for resource in ['wordnet', 'omw-1.4', 'punkt', 'punkt_tab', 'stopwords']:
+            try:
+                nltk.download(resource, quiet=True)
+            except Exception as e:
+                raise RuntimeError(f"Failed to download NLTK resource {resource}: {str(e)}")
+
+        # Define the bucket and prefix for input files
+        bucket_name = "strata-scrape"
+        input_prefix = "preprocessed_questions_"
+        
+        # Get the latest CSV file from the bucket
+        input_path = get_latest_csv_file(bucket_name, input_prefix)
+        print(f"Reading input file: {input_path}")
+        
+        # Read the CSV file into a DataFrame
+        df = pd.read_csv(input_path)
+        
+        # Validate input data
+        required_columns = ['difficulty', 'companies', 'question', 'answer']
+        if not all(col in df.columns for col in required_columns):
+            raise ValueError(f"Missing required columns: {set(required_columns) - set(df.columns)}")
+        
+        # Convert columns to strings to avoid type issues
+        df['companies'] = df['companies'].astype(str).fillna('')
+        df['question'] = df['question'].astype(str).fillna('')
+        df['answer'] = df['answer'].astype(str).fillna('')
+        
+        # Step 1: Group the 'difficulty' column into categories
+        difficulty_mapping = {
+            1: "Easy",
+            2: "Medium",
+            3: "Hard"
+        }
+        df['difficulty_group'] = df['difficulty'].map(difficulty_mapping)
+        
+        # Step 2: Encoding Categorical Variables
+        label_encoder = LabelEncoder()
+        df['difficulty_encoded'] = label_encoder.fit_transform(df['difficulty'])
+        
+        # Split companies into a list
+        df['companies'] = df['companies'].apply(lambda x: x.split('; ') if x and x != 'nan' else [])
+        
+        # Fit MultiLabelBinarizer on the entire dataset before augmentation
+        mlb = MultiLabelBinarizer()
+        companies_encoded = pd.DataFrame(
+            mlb.fit_transform(df['companies']),
+            columns=[f'company_{company}' for company in mlb.classes_],
+            index=df.index
+        )
+        
+        # Step 3: Feature Engineering
+        sql_keywords = r'\b(select|from|where|join|group by|order by)\b'
+        df['has_code_snippet'] = df['answer'].str.contains(sql_keywords, case=False, na=False).astype(int)
+        
+        text_columns = ['question', 'answer']
+        for col in text_columns:
+            df[f'{col}_word_count'] = df[col].apply(lambda x: len(str(x).split()) if isinstance(x, str) else 0)
+        
+        df['company_count'] = df['companies'].apply(lambda x: len(x) if isinstance(x, list) else 0)
+        
+        for col in text_columns:
+            df[f'{col}_keywords'] = df[col].apply(extract_keywords)
+        
+        # Step 4: Data Augmentation
+        augmented_df = df.copy()
+        augmented_df['question'] = augmented_df['question'].apply(synonym_replacement)
+        
+        # Recompute features for augmented data to ensure consistency
+        for col in text_columns:
+            augmented_df[f'{col}_word_count'] = augmented_df[col].apply(lambda x: len(str(x).split()) if isinstance(x, str) else 0)
+        for col in text_columns:
+            augmented_df[f'{col}_keywords'] = augmented_df[col].apply(extract_keywords)
+        
+        # Encode companies in augmented_df using the same MultiLabelBinarizer
+        augmented_companies_encoded = pd.DataFrame(
+            mlb.transform(augmented_df['companies']),
+            columns=[f'company_{company}' for company in mlb.classes_],
+            index=augmented_df.index
+        )
+        
+        # Add is_augmented column
+        augmented_df['is_augmented'] = 1
+        df['is_augmented'] = 0
+        
+        # Concatenate the companies_encoded DataFrames
+        df = df.drop(columns=['companies'])  # Drop the list column
+        augmented_df = augmented_df.drop(columns=['companies'])
+        df = pd.concat([df, companies_encoded], axis=1)
+        augmented_df = pd.concat([augmented_df, augmented_companies_encoded], axis=1)
+        
+        # Concatenate original and augmented DataFrames
+        final_df = pd.concat([df, augmented_df], ignore_index=True)
+        
+        # Ensure all columns are present and fill NaN values
+        expected_columns = final_df.columns.tolist()
+        final_df = final_df[expected_columns]  # Reorder columns
+        final_df = final_df.fillna('')  # Fill NaN with empty string to preserve columns in CSV
+        
+        # Define the output path
+        output_path = f"gs://{bucket_name}/transformed_questions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        
+        # Save to GCS
+        print(f"Writing to {output_path}")
+        print(f"DataFrame schema: {final_df.dtypes}")
+        print(f"Number of columns: {len(final_df.columns)}")
+        final_df.to_csv(output_path, index=False)
+        print(f"Done! Wrote {len(final_df)} rows to {output_path}")
+        
+    except Exception as e:
+        print(f"Error in transform_data: {str(e)}")
+        raise
+
+# Default arguments for the DAG
+default_args = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
+    'start_date': datetime(2025, 4, 8),
+    'max_active_runs': 1,
+}
+
+# Define the DAG
+with DAG(
+    'transformation_dag',
+    default_args=default_args,
+    description='DAG to transform StrataScratch questions with encoding, feature engineering, and augmentation',
+    schedule_interval='0 0 1 * *',
+    catchup=False,
+) as dag:
+
+    transform_task = PythonOperator(
+        task_id='transform_task',
+        python_callable=transform_data,
+    )
