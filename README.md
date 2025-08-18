@@ -17,6 +17,7 @@ It is built with Next.js, Tailwind CSS (frontend), Node.js/Express.js (backend),
 •	Performance Tracking: History of past sessions with analytics to measure progress.
 
 **Tech Stack**
+
 •	Frontend: Next.js, Tailwind CSS
 
 •	Backend: Node.js, Express.js
