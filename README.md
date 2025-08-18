@@ -1,6 +1,7 @@
 **AI-Mock-Interviewer-for-Data-Analyst-Data-Scientist**
 
 
+**LINK to download all codes related to the project : https://drive.google.com/drive/folders/13vvN75twn8-s-gMDUMXY8E3pgH0LtfZM?usp=drive_link**
 
 **Overview**
 
