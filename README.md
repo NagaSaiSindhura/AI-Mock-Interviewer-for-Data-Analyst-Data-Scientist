@@ -1,144 +1,117 @@
-  ## AI-Mock-Interviewer-for-Data-Analyst-Data-Scientist
+🎯 InterviewPrep-AI
 
+AI-Powered Mock Interview Platform for Data Analytics & Data Science
 
-**LINK to download all codes related to the project : https://drive.google.com/drive/folders/13vvN75twn8-s-gMDUMXY8E3pgH0LtfZM?usp=drive_link**
+📌 Overview
 
-**Overview**
+InterviewPrep-AI is an intelligent mock interview platform designed to help Data Analytics, Data Science, and Programming candidates prepare for real-world interviews through personalized, AI-driven interview simulations and instant feedback.
 
-InterviewPrep-AI is a web-based AI platform designed to simulate realistic mock interviews for aspiring Data Analysts, Data Scientists, and related roles. Unlike traditional mock interviews, which provide static questions and delayed feedback, InterviewPrep-AI uses large language models (LLMs), retrieval-augmented generation (RAG), NLP, and deep learning to generate job-specific questions, evaluate responses (text/audio/video), and provide instant, tailored feedback.
-It is built with Next.js, Tailwind CSS (frontend), Node.js/Express.js (backend), MongoDB/PostgreSQL (database), and Hugging Face/LLM APIs (AI layer), deployed on AWS/Vercel with Docker and Kubernetes for scalability.
+Unlike traditional mock interview tools with static question banks and delayed feedback, InterviewPrep-AI dynamically generates job-specific interview questions using resumes and job descriptions, evaluates candidate responses in real time, and provides actionable, qualitative feedback to improve performance.
 
-**Key Features**
-•	Dynamic Question Generation: Context-aware questions tailored to user resumes, job descriptions, and selected roles.
+🚀 Key Features
 
-•	Multiple Interview Formats: Technical (coding, SQL, DSA), behavioral (STAR), case studies, HR & soft skills.
+🔹 Dynamic Question Generation
+AI-generated interview questions tailored to:
 
-•	Multi-Modal Responses: Users can respond via text, audio, or video.
+Job role & experience level
 
-•	Real-Time Feedback: Deep learning & NLP evaluate responses on correctness, clarity, and problem-solving, with personalized improvement tips.
+Uploaded resume and job description
 
-•	Adaptive Interview Flow: AI adapts difficulty and follow-up questions dynamically.
+Interview type (Technical, DSA, Behavioral, Case Study, HR)
 
-•	Performance Tracking: History of past sessions with analytics to measure progress.
+🔹 Interview Format
+Candidates can respond via Text
 
-**Tech Stack**
+🔹 Real-Time AI Evaluation & Feedback
+Responses are analyzed using NLP and deep learning to assess:
 
-•	Frontend: Next.js, Tailwind CSS
+Accuracy
 
-•	Backend: Node.js, Express.js
+Clarity
 
-•	AI Models:
+Problem-solving approach
 
-o	Implemented: Mistralai/Mistral-7B-Instruct-v0.2 (fine-tuned for interview Q&A)
+Communication quality
+Personalized improvement suggestions are generated instantly.
 
-o	Proposed: Qwen 2.5, LLaMA 3, Gemma 7B, PaLM 2 (for multilingual, STAR evaluation, coding analysis)
+🔹 Multi-Model LLM Architecture
+Integrated and evaluated multiple LLMs:
 
+Mistral
 
-•	Data Engineering: Python (pandas, scikit-learn, NLTK, spaCy), Airflow DAGs, GCP Buckets, BigQuery
+Qwen
 
-•	Databases: MongoDB Atlas, PostgreSQL
+Gemma
 
-•	Deployment: AWS, Vercel, Docker, Kubernetes
+Enhanced LLaMA-3 (with RAG)
+Models are compared using accuracy, latency, ROUGE/BLEU, and qualitative feedback quality.
 
-•	Monitoring: Prometheus + Grafana
+🔹 Performance Tracking
+Tracks interview history, feedback trends, and skill progression over time.
 
-**Project Implementation**
+🧠 AI & Data Pipeline
 
-**1. Data Engineering**
-   
-•	Sources: LeetCode, StrataScratch, Indiabix, GitHub repositories, AmbitionBox, Kaggle, Reddit.
+Data Sources:
+LeetCode, StrataScratch, GitHub, AmbitionBox, Turing, Indiabix, and curated datasets
 
-•	Data Types: Technical coding Qs, SQL, DSA, behavioral, HR, and case study questions. (~4500+ unique questions).
+Data Engineering:
 
-•	Preprocessing: Cleaning duplicates, formatting, filtering offensive content, text normalization, stopword removal.
+Preprocessing, cleaning, transformation
 
-•	Transformations:
+Feature engineering (difficulty, sentiment, readability, lexical diversity)
 
-o	Difficulty classification (Easy/Medium/Hard)
+Stratified train/validation/test splits (70/10/20)
 
-o	Keyword extraction & sentiment analysis
+Evaluation Metrics:
 
-o	Readability & lexical diversity metrics
+Accuracy, Precision, Recall, F1-Score, ROUGE, BLEU, Meteor, Hallucinations and Faithfulness Score
 
-o	Feature engineering for ML compatibility
+🏗️ System Architecture
 
-•	Pipeline: Airflow DAGs automated ingestion → preprocessing → transformation → loading into GCP BigQuery.
+Frontend: React / Next.js + Tailwind CSS
 
-•	Data Splitting: Stratified train (70%), validation (15%), test (15%).
+Backend: FastAPI / Node.js (API layer)
 
-**2. Model Development**
+AI Services: Dockerized LLM inference with RAG pipelines
 
-•	Implemented Model: Mistral-7B-Instruct-v0.2 (fine-tuned using LoRA).
+Question Generation and Evaluation : RAG and Prompt enigneering
 
-•	Training: ~5 epochs, GPU with FP16, Hugging Face integration.
+Database: SQLite
 
-•	Evaluation Metrics:
+Deployment: Vercel (UI), cloud-hosted backend services
 
-o	ROUGE-1: 0.44, ROUGE-2: 0.29, BLEU: 0.20
+Scalability: Docker-based microservices, cloud-ready architecture
 
-o	Uniqueness ratio: 97.5% (diverse answers)
+🎯 Use Cases
 
-o	Average answer length close to human baseline.
+👩‍🎓 Job Seekers: Personalized interview practice with instant feedback
 
-•	**Example Outputs:** Technical & behavioral answers matched human-like clarity & coherence.
+🏫 Academia & Bootcamps: AI-driven interview training and assessment
 
+🏢 Corporate Training: Employee skill evaluation and leadership development
 
-**Future Models:**
+👥 Recruiters: Pre-screening and candidate evaluation support
 
-•	Qwen 2.5 → Long context, multilingual interviews.
+📊 Key Contributions
 
-•	Gemma 7B → Real-time follow-up Qs.
+Built an end-to-end AI interview simulation system
 
-•	LLaMA 3 (405B) → Advanced coding/SQL analysis.
+Designed a multi-LLM evaluation framework
 
-•	PaLM 2 → STAR-based behavioral evaluation.
+Implemented real-time qualitative feedback using NLP
 
-**3.System Architecture**
+Developed a scalable, cloud-deployable architecture
 
-•	Frontend: Resume/JD upload, role selection, response mode selection (text/audio/video).
+Created custom evaluation metrics for LLM-based interview systems
 
-•	Backend: Builds prompts → sends to LLM → processes feedback → stores results.
+🔮 Future Enhancements
 
-•	Data Flow:
-1.	User input → API call → LLM generation
+Speech emotion and confidence analysis
 
-2.	AI evaluates and generates feedback
+Advanced recruiter dashboards
 
-3.	Responses & scores stored in Firestore/BigQuery
+Multi-language interview support
 
-4.	Results visualized for performance tracking
+Adaptive difficulty progression
 
-**4. Deployment & Scalability**
-   
-•	Containerization: Dockerized model services.
-
-•	Scaling: Kubernetes orchestrates microservices.
-
-•	Hosting: Frontend on Vercel/Firebase, backend on AWS/GCP.
-
-•	Monitoring: Grafana dashboards for latency, accuracy, and uptime.
-
-**Applications**
-
-•	Job Seekers: Practice domain-specific interviews and improve performance.
-
-•	Recruiters: Use AI-assisted evaluation for candidate assessment.
-
-•	Academia: Integrate with career coaching & bootcamps.
-
-•	Corporate Training: Support employee upskilling & leadership assessment.
-
-**Future Enhancements**
-
-•	Multi-language support.
-
-•	Integration with video analysis (facial expressions, emotions).
-
-•	Gamified interview practice.
-
-•	Advanced analytics dashboards for recruiters & trainers.
-
-**Conclusion**
-
-InterviewPrep-AI is an LLM-powered interview simulator that blends data engineering, NLP, deep learning, and cloud deployment to provide personalized, real-time interview preparation. By combining adaptive question generation, multimodal evaluation, and instant feedback, it sets a new benchmark in career preparation platforms.
-
+Fine-tuned domain-specific LLMs
