@@ -11,11 +11,12 @@ Unlike traditional mock interview tools with static question banks and delayed f
 🚀 Key Features
 
 🔹 Dynamic Question Generation
+
 AI-generated interview questions tailored to:
 
-Job role & experience level
+1. Job role & experience level
 
-Uploaded resume and job description
+2. Uploaded resume and job description
 
 Interview type (Technical, DSA, Behavioral, Case Study, HR)
 
@@ -25,13 +26,14 @@ Candidates can respond via Text
 🔹 Real-Time AI Evaluation & Feedback
 Responses are analyzed using NLP and deep learning to assess:
 
-Accuracy
+1. Accuracy
 
-Clarity
+2. Clarity
 
-Problem-solving approach
+3. Problem-solving approach
 
-Communication quality
+4. Communication quality
+
 Personalized improvement suggestions are generated instantly.
 
 🔹 Multi-Model LLM Architecture
